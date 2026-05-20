@@ -134,8 +134,6 @@ function isCompleted(msg: WsJson, progress: number | null): boolean {
     .trim()
     .toLowerCase();
   if (status === "completed" || status === "done" || status === "success") return true;
-  // An `image` type WS frame is the final image payload (blob); treat as completed.
-  if (String(msg.type ?? "").toLowerCase() === "image") return true;
   return progress !== null && progress >= 100;
 }
 
@@ -201,6 +199,11 @@ export async function generateImagineWs(args: {
 
   const imageIndexes = new Map<string, number>();
   const finalUrls = new Map<string, string>();
+  // Per Grok's current protocol, each job emits multiple `image` frames
+  // (progressively higher quality) and then a `json` frame with
+  // current_status="completed". We track the latest blob per job_id and
+  // only mark it final when the matching completed signal arrives.
+  const latestByJob = new Map<string, string>();
 
   await new Promise<void>((resolve, reject) => {
     let finished = false;
@@ -208,25 +211,6 @@ export async function generateImagineWs(args: {
     const onMessage = (event: MessageEvent) => {
       const msg = parseWsJson(event.data);
       if (!msg) return;
-
-      // DEBUG: log msg structure (keys + sizes, truncated blob)
-      try {
-        const keys = Object.keys(msg);
-        const info: Record<string, unknown> = {};
-        for (const k of keys) {
-          const v = (msg as Record<string, unknown>)[k];
-          if (k === "blob" && typeof v === "string") {
-            info[k] = `[base64 ${v.length} chars]`;
-          } else if (typeof v === "string" && v.length > 80) {
-            info[k] = v.slice(0, 80) + "...";
-          } else {
-            info[k] = v;
-          }
-        }
-        console.log("WS_RECV", JSON.stringify(info));
-      } catch {
-        // ignore
-      }
 
       const msgRequestId = String(msg.request_id ?? msg.requestId ?? "");
       if (msgRequestId && msgRequestId !== requestId) return;
@@ -240,8 +224,13 @@ export async function generateImagineWs(args: {
         return;
       }
 
+      const jobId = String(
+        (msg as { job_id?: unknown; jobId?: unknown }).job_id ??
+          (msg as { jobId?: unknown }).jobId ??
+          "",
+      );
       const rawImageId = String(msg.id ?? msg.imageId ?? msg.image_id ?? "");
-      const imageId = rawImageId || `image-${imageIndexes.size}`;
+      const imageId = rawImageId || jobId || `image-${imageIndexes.size}`;
       if (!imageIndexes.has(imageId)) imageIndexes.set(imageId, imageIndexes.size);
       const imageIndex = imageIndexes.get(imageId) ?? 0;
 
@@ -252,15 +241,25 @@ export async function generateImagineWs(args: {
         });
       }
 
-      const imageUrl = extractUrl(msg);
-      if (imageUrl && isCompleted(msg, progress)) {
-        if (!finalUrls.has(imageId)) finalUrls.set(imageId, imageUrl);
-        if (args.completedCb) {
-          Promise.resolve(args.completedCb({ index: imageIndex, url: imageUrl })).catch(() => {
-            // ignore callback failures
-          });
+      // `image` frames carry the blob; keep overwriting with the latest version per job.
+      if (type === "image") {
+        const url = extractUrl(msg);
+        if (url && jobId) latestByJob.set(jobId, url);
+        return;
+      }
+
+      // `json` frame with completed status finalizes the latest blob for this job.
+      if (isCompleted(msg, progress)) {
+        const finalUrl = (jobId && latestByJob.get(jobId)) || extractUrl(msg);
+        if (finalUrl && !finalUrls.has(imageId)) {
+          finalUrls.set(imageId, finalUrl);
+          if (args.completedCb) {
+            Promise.resolve(args.completedCb({ index: imageIndex, url: finalUrl })).catch(() => {
+              // ignore callback failures
+            });
+          }
+          if (finalUrls.size >= targetCount) finish();
         }
-        if (finalUrls.size >= targetCount) finish();
       }
     };
 
