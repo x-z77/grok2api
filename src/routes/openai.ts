@@ -305,6 +305,12 @@ async function fetchImageAsBase64(args: {
   cookie: string;
   settings: Awaited<ReturnType<typeof getSettings>>["grok"];
 }): Promise<string> {
+  // Inline data URI (e.g. produced by Grok WS blob): no fetch needed.
+  if (args.rawUrl.startsWith("data:")) {
+    const commaIdx = args.rawUrl.indexOf(",");
+    if (commaIdx >= 0) return args.rawUrl.slice(commaIdx + 1);
+  }
+
   let url: URL;
   try {
     url = new URL(args.rawUrl);
