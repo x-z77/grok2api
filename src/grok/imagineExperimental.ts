@@ -209,6 +209,25 @@ export async function generateImagineWs(args: {
       const msg = parseWsJson(event.data);
       if (!msg) return;
 
+      // DEBUG: log msg structure (keys + sizes, truncated blob)
+      try {
+        const keys = Object.keys(msg);
+        const info: Record<string, unknown> = {};
+        for (const k of keys) {
+          const v = (msg as Record<string, unknown>)[k];
+          if (k === "blob" && typeof v === "string") {
+            info[k] = `[base64 ${v.length} chars]`;
+          } else if (typeof v === "string" && v.length > 80) {
+            info[k] = v.slice(0, 80) + "...";
+          } else {
+            info[k] = v;
+          }
+        }
+        console.log("WS_RECV", JSON.stringify(info));
+      } catch {
+        // ignore
+      }
+
       const msgRequestId = String(msg.request_id ?? msg.requestId ?? "");
       if (msgRequestId && msgRequestId !== requestId) return;
 
