@@ -145,6 +145,17 @@ export const MODEL_CONFIG: Record<string, ModelInfo> = {
     supported_max_output_tokens: 131072,
     default_top_p: 0.95,
   },
+  "grok-4.3-beta": {
+    grok_model: ["grok-420-computer-use-sa", "MODEL_MODE_GROK_420"],
+    rate_limit_model: "grok-420-computer-use-sa",
+    display_name: "Grok 4.3 Beta",
+    description: "Grok 4.3 beta — uses Skills and Connectors (latest as of 2026-05-20)",
+    raw_model_path: "xai/grok-420-computer-use-sa",
+    default_temperature: 1.0,
+    default_max_output_tokens: 8192,
+    supported_max_output_tokens: 131072,
+    default_top_p: 0.95,
+  },
   "grok-imagine-1.0": {
     grok_model: ["grok-3", "MODEL_MODE_FAST"],
     rate_limit_model: "grok-3",
