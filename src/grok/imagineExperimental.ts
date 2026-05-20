@@ -119,6 +119,11 @@ function extractUrl(msg: WsJson): string {
     const value = msg[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
+  // Grok's current WS protocol returns base64-encoded image inline as `blob`
+  const blob = (msg as { blob?: unknown }).blob;
+  if (typeof blob === "string" && blob.trim()) {
+    return `data:image/jpeg;base64,${blob.trim()}`;
+  }
   return "";
 }
 
@@ -127,6 +132,8 @@ function isCompleted(msg: WsJson, progress: number | null): boolean {
     .trim()
     .toLowerCase();
   if (status === "completed" || status === "done" || status === "success") return true;
+  // An `image` type WS frame is the final image payload (blob); treat as completed.
+  if (String(msg.type ?? "").toLowerCase() === "image") return true;
   return progress !== null && progress >= 100;
 }
 
@@ -140,14 +147,16 @@ function buildImagineWsPayload(prompt: string, requestId: string, aspectRatio: s
         {
           requestId,
           text: prompt,
-          type: "input_scroll",
+          type: "input_text",
           properties: {
             section_count: 0,
             is_kids_mode: false,
             enable_nsfw: true,
             skip_upsampler: false,
+            enable_side_by_side: true,
             is_initial: false,
             aspect_ratio: aspectRatio,
+            enable_pro: false,
           },
         },
       ],
