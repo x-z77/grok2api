@@ -1,3 +1,4 @@
+// Models registry (see PATCHES.md for fork-specific entries like grok-4.3-beta)
 export interface ModelInfo {
   grok_model: [string, string];
   rate_limit_model: string;
