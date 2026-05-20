@@ -115,14 +115,16 @@ function extractProgress(msg: WsJson): number | null {
 }
 
 function extractUrl(msg: WsJson): string {
-  for (const key of ["url", "imageUrl", "image_url"] as const) {
-    const value = msg[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  // Grok's current WS protocol returns base64-encoded image inline as `blob`
+  // Grok's current WS protocol delivers the image inline as a base64 `blob`.
+  // The `url` field, when present, points to a CDN path that often 404s
+  // (asset is not actually published there), so we prefer `blob`.
   const blob = (msg as { blob?: unknown }).blob;
   if (typeof blob === "string" && blob.trim()) {
     return `data:image/jpeg;base64,${blob.trim()}`;
+  }
+  for (const key of ["url", "imageUrl", "image_url"] as const) {
+    const value = msg[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return "";
 }
